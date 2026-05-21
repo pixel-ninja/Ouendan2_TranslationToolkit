@@ -8,6 +8,8 @@ import glob
 from collections import defaultdict
 import subprocess
 from multiprocessing import Pool
+import argparse
+from datetime import datetime, timedelta
 
 from PIL import Image
 
@@ -19,6 +21,7 @@ PROJECT = 'Osu! Tatakae! Ouendan 2'
 TOOLS = './tools'
 UNPACKED = './rom_unpacked'
 OUTPUT = f'{PROJECT} ({LANGUAGE}).nds'
+PATCH = OUTPUT.replace('.nds', f'_{datetime.today().strftime("%y%m%d")}.xdelta')
 IMAGES = f'./images_{LANGUAGE}'
 DATA_SRC = './data'
 DATA_DST = f'{UNPACKED}/data/data'
@@ -29,7 +32,7 @@ def find_rom() -> str:
 	that doesn't match the output name."""
 	files = glob.glob("./*.nds")
 	for file in files:
-		if file != OUTPUT:
+		if os.path.basename(file) != OUTPUT:
 			return file
 	raise Exception(f'No nds file found. Ensure you have the {PROJECT} rom in the same directory as this script.')
 
@@ -119,7 +122,14 @@ def process_tasks(tasks: list) -> None:
 		process_cmd(cmd)
 
 
-def convert_images() -> None:
+def is_recent(path: str, days:float=0) -> bool:
+	modified_timestamp = os.path.getmtime(path)
+	modified_date = datetime.fromtimestamp(modified_timestamp)
+	current_date = datetime.now()
+	return current_date - modified_date < timedelta(days=days)
+
+
+def convert_images(recent:float=0, filter=None) -> None:
 	"""Finds all translated images and passed them to the converter."""
 	tasks: dict[str, list] = defaultdict(list)
 	files_to_compress: set[str] = set()
@@ -134,7 +144,12 @@ def convert_images() -> None:
 			if not ext in ['.png', '.bmp']:
 				continue
 
-			image = os.path.join(root, file)
+			image = os.path.join(root, file).replace('\\', '/')
+			if recent and not is_recent(image):
+				continue
+
+			if filter is not None and filter not in image:
+				continue
 
 			if os.path.exists(f'{data_root}/{name}.ntft_'):
 				items, cmd = image_to_files_and_cmd(image, 'ntft')
@@ -148,7 +163,13 @@ def convert_images() -> None:
 			print(f'Finding Images: {root}/{name}', end='\r')
 
 		for dir in dirs:
-			image = os.path.join(root, dir)
+			image = os.path.join(root, dir).replace('\\', '/')
+			if recent and not is_recent(image):
+				continue
+
+			if filter is not None and filter not in image:
+				continue
+
 			if os.path.exists(f'{data_root}/{dir}.NCER_'):
 				items, cmd = image_to_files_and_cmd(image, 'ncer')
 			else:
@@ -160,11 +181,12 @@ def convert_images() -> None:
 
 	print('')
 	print('Finding Images: Done!')
+	
 	print(f'Processing Images ...')
 	with Pool(os.cpu_count() -1) as p:
 		p.map(process_tasks, tasks.values())
 	print(f'Processing Images ... Done!')
-	
+
 	print(f'Compressing Files ...')
 	compression_cmds = [f'{TOOLS}/lzss.exe -evn {item}' for item in files_to_compress]
 	with Pool(os.cpu_count() -1) as p:
@@ -173,21 +195,43 @@ def convert_images() -> None:
 
 
 def main():
-	if not os.path.exists(UNPACKED):
-		print('Finding nds file')
-		rom = find_rom()
+	parser = argparse.ArgumentParser(
+		prog='Ouendan2 Rom Builder',
+		description='Handles unpacking, converting, compressing, packing and patch generation for the Ouendan 2 translation project.',
+		epilog='Running without any cpdl flags enables all four.')
+	parser.add_argument('-u', '--unpack', action='store_true', help="Force unpack of source rom")
+	parser.add_argument('-c', '--convert', action='store_true', help="Convert and compress images")
+	parser.add_argument('-p', '--pack', action='store_true', help="Pack output rom")
+	parser.add_argument('-d', '--delta', action='store_true', help="Make xdelta patch")
+	parser.add_argument('-l', '--launch', action='store_true', help="Launch output rom in MelonDS")
+	parser.add_argument('-r', '--recent', type=float, default=0.0, help="Only convert images changed in the last n days")
+	parser.add_argument('-f', '--filter', help="Only convert images with paths containing this filter string")
+	args = parser.parse_args()
+
+	all = args.convert + args.pack + args.delta + args.launch == 0
+
+	print('Finding source nds file')
+	rom = find_rom()
+
+	if not os.path.exists(UNPACKED) or args.unpack:
 		print(f'Unpacking {os.path.basename(rom)}')
 		subprocess.run(f'{TOOLS}/NitroPacker.exe unpack -r "{rom}" -o "{UNPACKED}" -p "{PROJECT}"')
 	
-	print('Converting images')
-	convert_images()
+	if args.convert or all:
+		print('Converting images')
+		convert_images(recent=args.recent, filter=args.filter)
 
-	if len(sys.argv) > 1 and sys.argv[1] == 'nopack':
-		return
+	if args.pack or all:
+		print(f'Packing Rom: {OUTPUT}')
+		subprocess.run(f'{TOOLS}/NitroPacker.exe pack -p "{UNPACKED}/{PROJECT}.json" -r "{OUTPUT}"')
 
-	print(f'Packing Rom: {OUTPUT}')
-	subprocess.run(f'{TOOLS}/NitroPacker.exe pack -p "{UNPACKED}/{PROJECT}.json" -r "{OUTPUT}"')
-
+	if args.delta or all:
+		print(f'Creating Patch: {PATCH}')
+		subprocess.run(f'{TOOLS}/xdelta3.exe -e -f -s "{rom}" "{OUTPUT}" "{PATCH}"')
+	
+	if args.launch:
+		print(f'Launching: {OUTPUT}')
+		subprocess.run(f'{TOOLS}/melonDS.exe "{OUTPUT}"')
 	
 if __name__ == "__main__":
 	main()
