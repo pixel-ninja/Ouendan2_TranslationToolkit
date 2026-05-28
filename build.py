@@ -122,14 +122,14 @@ def process_tasks(tasks: list) -> None:
 		process_cmd(cmd)
 
 
-def is_recent(path: str, days:float=0) -> bool:
+def is_recent(path: str, days:float=0.0) -> bool:
 	modified_timestamp = os.path.getmtime(path)
 	modified_date = datetime.fromtimestamp(modified_timestamp)
 	current_date = datetime.now()
 	return current_date - modified_date < timedelta(days=days)
 
 
-def convert_images(recent:float=0, filter=None) -> None:
+def convert_images(recent:float=0.0, filter=None) -> None:
 	"""Finds all translated images and passed them to the converter."""
 	tasks: dict[str, list] = defaultdict(list)
 	files_to_compress: set[str] = set()
@@ -145,7 +145,7 @@ def convert_images(recent:float=0, filter=None) -> None:
 				continue
 
 			image = os.path.join(root, file).replace('\\', '/')
-			if recent and not is_recent(image):
+			if recent and not is_recent(image, days=recent):
 				continue
 
 			if filter is not None and filter not in image:
@@ -164,7 +164,7 @@ def convert_images(recent:float=0, filter=None) -> None:
 
 		for dir in dirs:
 			image = os.path.join(root, dir).replace('\\', '/')
-			if recent and not is_recent(image):
+			if recent and not is_recent(image, days=recent):
 				continue
 
 			if filter is not None and filter not in image:
