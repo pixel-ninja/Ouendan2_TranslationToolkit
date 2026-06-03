@@ -540,10 +540,3 @@ map_2d: dict[str, tuple[str, str]] = {
 	'mv/sb03/PLD_NL/bg1_sb.NSCR_': ('mv/sb03/PLD_NL/bg1_s.NCGR_', 'mv/sb03/PLD_NL/bg_s.NCLR_'),
 }
 
-duplicate_nclr: list[str] = [
-
-]
-
-unique_ncgr: list[str] = [
-]
-
