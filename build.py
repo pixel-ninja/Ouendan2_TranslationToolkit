@@ -229,7 +229,7 @@ def main():
 		print(f'Creating Patch: {PATCH}')
 		subprocess.run(f'{TOOLS}/xdelta3.exe -e -f -s "{rom}" "{OUTPUT}" "{PATCH}"')
 	
-	if args.launch:
+	if args.launch or all:
 		print(f'Launching: {OUTPUT}')
 		subprocess.run(f'{TOOLS}/melonDS.exe "{OUTPUT}"')
 	
