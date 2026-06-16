@@ -1,0 +1,7 @@
+endian LITTLE
+get idstring long
+get SIZE long
+get ZSIZE long
+get NAME filename
+comtype lzo1x
+clog NAME 0xc ZSIZE SIZE
